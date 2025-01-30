@@ -3,9 +3,12 @@ import requests
 from threading import Thread, Timer, active_count, Lock, current_thread
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Tuple, Dict
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
-
+# API URLs
 MAP_API = "https://api.waqi.info/v2/map/bounds?latlng={lat1},{lng1},{lat2},{lng2}&networks=all&token={token}"
 GEO_API = "https://api.waqi.info/feed/geo:{lat};{lon}/?token={token}"
 
@@ -32,7 +35,7 @@ class calculate_average_pm25:
         self.__stations = [] # holds station coordinates
         self.pm25data   = []
 
-        self.__smapling_threads = {}
+        self.__sampling_threads = {}
         self.__lock = Lock()
         self.thread_cnt       = 8 # can be adjusted for performance
         
@@ -158,19 +161,23 @@ class calculate_average_pm25:
         Set the state of each thread and update the object state with thread safety.
         '''
         with self.__lock:
-            self.__smapling_threads[thread_obj] = thread_state
+            self.__sampling_threads[thread_obj] = thread_state
 
-            if any([state == self.RUNNING for state in self.__smapling_threads.values()]):
+            logging.info(f"{thread_obj.name} state: {thread_state}")
+
+            if any([state == self.RUNNING for state in self.__sampling_threads.values()]):
                 self.state = self.RUNNING
 
-            elif all([state == self.DONE for state in self.__smapling_threads.values()]):
+            elif all([state == self.DONE for state in self.__sampling_threads.values()]):
                 self.state = self.DONE
 
-            elif all([state == self.FAILED for state in self.__smapling_threads.values()]):
+            elif all([state == self.FAILED for state in self.__sampling_threads.values()]):
                 self.state = self.FAILED
 
             else:
                 self.state = self.IDLE
+            
+            logging.info(f"State: {self.state}")
             
 
     def __smapler(self):
@@ -194,13 +201,13 @@ class calculate_average_pm25:
                 except Exception as exc:
                     print(f'{station} generated an exception: {exc}')
 
-        self.__set_state(self.DONE)
+        self.__set_state(self.DONE, current_thread())
     
-    def __smapler_thread_wrapper(self):
+    def __smapler_thread_wrapper(self, name="Worker"):
         '''
         Wrapper function to run the worker function in a thread.
         '''
-        work_thread = Thread(target=self.__smapler)
+        work_thread = Thread(target=self.__smapler, name=name)
         work_thread.start()
 
 
@@ -219,14 +226,32 @@ class calculate_average_pm25:
 
 
         for delay in range(0, self.__sampling_period * 60, 60 // self.__sampling_rate):
-            # Non-blocking timers to run worker threads on sampling intervals
-            sampling_thread = Timer(delay, self.__smapler_thread_wrapper)
-            self.__smapling_threads[sampling_thread] = self.IDLE
-            self.__smapling_threads[sampling_thread].start()
+            # Non-blocking timers threads to run worker threads on sampling intervals
+            sampling_thread = Timer(delay, 
+                                    self.__smapler_thread_wrapper, args=[f"Sampler-{delay}s"]
+                                    )
+            self.__sampling_threads[sampling_thread] = self.IDLE
+            sampling_thread.start()
         
     
     def stop_sampling(self) -> None:
-        pass
+        '''
+        Stop the sampling process. Clean up data.
+        '''
+        # wait for running threads to finish and cancel the rest
+        for thread,state in self.__sampling_threads.items():
+            if state == self.RUNNING:
+                thread.join()
+            elif state == self.IDLE:
+                self.__sampling_threads[thread] = self.STOPPED
+                thread.cancel()
+
+        self.state = self.STOPPED
+
+        # clean up for next run
+        self.pm25data.clear()
+        self.__sampling_threads.clear()
+        
 
 
     def sampling_status(self) -> str:

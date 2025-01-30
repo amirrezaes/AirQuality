@@ -1,7 +1,7 @@
 from air_quality_analyzer.analyzer import calculate_average_pm25
 import time
 
-my_obj = calculate_average_pm25(48.441591, -123.377021, 49.201088, -122.7613762)
+my_obj = calculate_average_pm25(48.441591, -123.377021, 49.201088, -122.7613762, 1, 10)
 
 my_obj.set_token("f75e2f09d2fae1680d7a42a642dfdc7654392b94")
 
