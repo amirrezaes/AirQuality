@@ -1,6 +1,6 @@
 import json
 import requests
-from threading import Thread, Timer, active_count
+from threading import Thread, Timer, active_count, Lock, current_thread
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Tuple, Dict
 
@@ -32,7 +32,8 @@ class calculate_average_pm25:
         self.__stations = [] # holds station coordinates
         self.pm25data   = []
 
-        self.__worker_threads = []
+        self.__smapling_threads = {}
+        self.__lock = Lock()
         self.thread_cnt       = 8 # can be adjusted for performance
         
 
@@ -61,7 +62,7 @@ class calculate_average_pm25:
 
         # Check status first
         if json_data.get('status') != 'ok':
-            self._handle_api_error(json_data)
+            self.__handle_api_error(json_data)
             return None
         
 
@@ -152,11 +153,33 @@ class calculate_average_pm25:
         pm25_val = self.__extract_pm25(station_data)
         return pm25_val
 
-    def __worker(self):
+    def __set_state(self, thread_state: str, thread_obj: Thread):
+        '''
+        Set the state of each thread and update the object state with thread safety.
+        '''
+        with self.__lock:
+            self.__smapling_threads[thread_obj] = thread_state
+
+            if any([state == self.RUNNING for state in self.__smapling_threads.values()]):
+                self.state = self.RUNNING
+
+            elif all([state == self.DONE for state in self.__smapling_threads.values()]):
+                self.state = self.DONE
+
+            elif all([state == self.FAILED for state in self.__smapling_threads.values()]):
+                self.state = self.FAILED
+
+            else:
+                self.state = self.IDLE
+            
+
+    def __smapler(self):
         '''
         Run multiple threads to get PM2.5 values for all stations.
         '''
         results = []
+        self.__set_state(self.RUNNING , current_thread())
+
         with ThreadPoolExecutor(max_workers=self.thread_cnt) as executor:
             thread_dict = {executor.submit(self.__get_pm25, st): st for st in self.__stations}
 
@@ -170,16 +193,22 @@ class calculate_average_pm25:
 
                 except Exception as exc:
                     print(f'{station} generated an exception: {exc}')
+
+        self.__set_state(self.DONE)
     
-    def _worker_thread_wrapper(self):
+    def __smapler_thread_wrapper(self):
         '''
         Wrapper function to run the worker function in a thread.
         '''
-        work_thread = Thread(target=self.__worker)
+        work_thread = Thread(target=self.__smapler)
         work_thread.start()
 
 
-    def start_sampling(self):
+    def start_sampling(self) -> None:
+        '''
+        Start sampling PM2.5 values for all stations.
+        '''
+
         if self.TOKEN: # check if token is set
             if self.__stations == []: # if stations are not already extracted
                 self.__stations = self.__extract_stations(self.__get_map_bound())
@@ -187,31 +216,45 @@ class calculate_average_pm25:
             print("Error: Token not set. use set_token()")
             self.state = self.FAILED
             return
-        
-        self.state = self.RUNNING
+
 
         for delay in range(0, self.__sampling_period * 60, 60 // self.__sampling_rate):
-            
-            # Non-blocking timers to run worker threads at sampling rate
-            self.__worker_threads.append(Timer(delay , self._worker_thread_wrapper))
-            self.__worker_threads[-1].start()
+            # Non-blocking timers to run worker threads on sampling intervals
+            sampling_thread = Timer(delay, self.__smapler_thread_wrapper)
+            self.__smapling_threads[sampling_thread] = self.IDLE
+            self.__smapling_threads[sampling_thread].start()
         
     
-    def stop_sampling(self):
+    def stop_sampling(self) -> None:
         pass
 
 
-    def sampling_status(self):
-        if active_count() == 1:
-            self.state = self.DONE
-        return f"worker threads: {len(self.__worker_threads)} | state: {self.state}"
+    def sampling_status(self) -> str:
+        '''
+        Get the status of the sampling process.
+
+        Returns:
+            str: Status of the sampling process
+        '''
+        return self.state
 
 
-    def avg_pm25_all_sites(self):
+    def avg_pm25_all_sites(self) -> float:
         pass
     
-    def set_token(self, token):
-        self.TOKEN = token
+    def set_token(self, token: str) -> None:
+        '''
+        Set the token for the API.
+
+        Args:
+            token (str): API token for the waqi.info API.
+        '''
+        if isinstance(token, str):
+            self.TOKEN = token
+        else:
+            print("Error: Token must be a string.")
+            self.state = self.FAILED
+            return
 
     
 
