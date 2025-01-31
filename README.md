@@ -93,8 +93,8 @@ The analyzer can be in one of these states:
 
 ## Threads
 Two set of threading approaches used:
--`ThreadPoolExecutor`: was used to concurrently make requests and get station data. defult threads: 8
--`threading.Timer`: To run sampleling processes on sampling intervals without blocking main thread. 
+- `ThreadPoolExecutor`: was used to concurrently make requests and get station data. defult threads: 8
+- `threading.Timer`: To run sampleling processes on sampling intervals without blocking main thread. 
 
 ## Development and Test
 
