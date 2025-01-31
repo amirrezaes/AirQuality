@@ -256,7 +256,10 @@ class calculate_average_pm25:
 
     def start_sampling(self, blocking=False) -> None:
         '''
-        Start sampling PM2.5 values for all stations.
+        Start sampling PM2.5 values with multiple threads.
+
+        Args:
+            blocking (bool): If True, the function will block until all threads are finished.
         '''
 
         if not self.TOKEN: # if token is not set
@@ -282,8 +285,9 @@ class calculate_average_pm25:
             # Non-blocking timers threads to run worker threads on sampling intervals
             timer_thread = Timer(delay, 
                                     self.__smapler_thread_wrapper, 
-                                    args=[f"Sampler-{delay}s", blocking]
+                                    args=[f"Sampler-{delay}s", blocking],
                                     )
+            timer_thread.setName(f"Timer-{delay}s")
             self.__timer_threads[timer_thread] = self.IDLE
             
         
