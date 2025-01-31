@@ -63,7 +63,7 @@ print(f"Average PM2.5: {result}")
 # Stop sampling manually
 analyzer.stop_sampling()
 ```
-Check [sample_code.py](https://github.com/amirrezaes/AirQuality/blob/main/sample_code.py) for more examples
+Check [sample_code.py](https://github.com/amirrezaes/AirQuality/blob/main/sample_code.py) and [doc](https://github.com/amirrezaes/AirQuality/blob/main/doc/documentation.md)for more examples
 ## Configuration
 
 The analyzer can be configured with several parameters:
