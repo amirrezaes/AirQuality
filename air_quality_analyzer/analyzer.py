@@ -229,10 +229,14 @@ class calculate_average_pm25:
                 except Exception as exc:
                     logging.error(f"station at lat,lng {station} generated Error: {exc}")
 
-        with self.__lock:
-            self.pm25data.extend(results)
 
-        self.__set_state(self.DONE, current_thread())
+        
+        if results:
+            with self.__lock:
+                self.pm25data.extend(results)
+            self.__set_state(self.DONE, current_thread())
+        else:
+            self.__set_state(self.FAILED, current_thread())
 
     
     def __smapler_thread_wrapper(self, name="Worker", blocking=False):
