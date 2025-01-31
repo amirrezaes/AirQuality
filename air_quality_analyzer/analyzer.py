@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Tuple, Dict
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 # API URLs
@@ -13,6 +13,9 @@ GEO_API = "https://api.waqi.info/feed/geo:{lat};{lon}/?token={token}"
 
 class calculate_average_pm25:
     def __init__(self, latitude_1, longitude_1, latitude_2, longitude_2, sampling_period=5, sampling_rate=1):
+
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self.set_logger_level('info')
 
         self.TOKEN = ""
 
@@ -49,7 +52,8 @@ class calculate_average_pm25:
         Args:
             error (dict): JSON data containing error message
         """
-        logging.error(f"{error.get('message')}")
+        self.logger.error(f"{error.get('message')}")
+    
 
     def __calculate_avg_pm25(self) -> float:
         """
@@ -141,7 +145,7 @@ class calculate_average_pm25:
             else:
                 return None
         except requests.exceptions.RequestException as e:
-            logging.error(f"{e}")
+            self.logger.error(f"{e}")
             return None
 
 
@@ -165,7 +169,7 @@ class calculate_average_pm25:
             else:
                 return None
         except requests.exceptions.RequestException as e:
-            logging.error(f"{e}")
+            self.logger.error(f"{e}")
             return None
     
     
@@ -190,7 +194,7 @@ class calculate_average_pm25:
         with self.__lock:
             self.__timer_threads[thread_obj] = thread_state
 
-            logging.info(f"{thread_obj.name} state: {self.__timer_threads[thread_obj]}")
+            self.logger.info(f"{thread_obj.name} state: {self.__timer_threads[thread_obj]}")
 
             if any([state == self.RUNNING for state in self.__timer_threads.values()]):
                 self.state = self.RUNNING
@@ -225,7 +229,7 @@ class calculate_average_pm25:
                         results.append(pm25_val)
 
                 except Exception as exc:
-                    logging.error(f"station at lat,lng {station} generated Error: {exc}")
+                    self.logger.error(f"station at lat,lng {station} generated Error: {exc}")
 
 
         
@@ -245,8 +249,11 @@ class calculate_average_pm25:
             blocking (bool): If True, the function will block until all threads are finished.
         '''
 
+        # clear previous run data
+        self.clean_up()
+
         if not self.TOKEN: # if token is not set
-            logging.error("Error: Token is not set.")
+            self.logger.error("Error: Token is not set.")
             self.state = self.FAILED
             return
 
@@ -254,12 +261,12 @@ class calculate_average_pm25:
             self.__stations = self.__extract_stations(self.__get_map_bound())
 
             if self.__stations is None:
-                logging.error("Request to get stations failed.")
+                self.logger.error("Request to get stations failed.")
                 self.state = self.FAILED
                 return
 
             elif self.__stations == []:
-                logging.error("No stations found in the given bounds.")
+                self.logger.error("No stations found in the given bounds.")
                 self.state = self.DONE
                 return
 
@@ -276,11 +283,8 @@ class calculate_average_pm25:
 
         if blocking:
             for thread in self.__timer_threads.keys():
-                thread.join()
+                thread.join()                
 
-
-                
-        
     
     def stop_sampling(self) -> None:
         '''
@@ -290,7 +294,7 @@ class calculate_average_pm25:
         # wait for Running Timer threads to finish and cancel the rest
         for thread,state in self.__timer_threads.items():
             if state == self.RUNNING:
-                logging.info(f"Waiting for {thread.name} to finish.")
+                self.logger.info(f"Waiting for {thread.name} to finish.")
                 thread.join()
             elif state == self.IDLE or thread.is_alive():
                 self.__timer_threads[thread] = self.STOPPED
@@ -298,13 +302,11 @@ class calculate_average_pm25:
 
         self.state = self.STOPPED
 
-        logging.info("Sampling stopped.")
+        self.logger.info("Sampling stopped.")
 
         # clean up for next run
-        self.pm25data.clear()
-        self.__timer_threads.clear()
+        self.clean_up()
         
-
 
     def sampling_status(self) -> str:
         '''
@@ -340,6 +342,28 @@ class calculate_average_pm25:
         if isinstance(token, str):
             self.TOKEN = token
         else:
-            logging.error("Token must be a string.")
+            self.logger.error("Token must be a string.")
             self.state = self.FAILED
             return
+    
+    def clean_up(self):
+        '''
+        Clean up the object.
+        '''
+        self.pm25data.clear()
+        self.__timer_threads.clear()
+        self.state = self.STOPPED
+
+    def set_logger_level(self, lvl:str) -> None:
+        '''
+        Set logging verbosity
+
+        Args:
+            lvl: info, error, critical
+        '''
+        if lvl == 'error':
+            self.logger.setLevel(logging.ERROR)
+        elif lvl == 'info':
+            self.logger.setLevel(logging.INFO)
+        else:
+            self.logger.setLevel(logging.CRITICAL)
