@@ -32,6 +32,7 @@ pip install .
 Here's a basic example of how to use the Air Quality Analyzer:
 
 ```python
+import time
 from air_quality_analyzer.analyzer import calculate_average_pm25
 
 # Initialize the analyzer with geographical bounds
