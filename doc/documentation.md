@@ -84,15 +84,14 @@ def clean_up() -> None
 ```python
 # Create an instance for the Los Angeles area
 calculator = calculate_average_pm25(
-    latitude_1=34.0522,  # LA downtown
-    longitude_1=-118.2437,
+    latitude_1=48.0522,  # Victoria downtown
+    longitude_1=-128.2437,
     latitude_2=34.0689,  # Hollywood
     longitude_2=-118.3267,
     sampling_period=10,  # 10 minutes
-    sampling_rate=2      # 2 samples per minute
+    sampling_rate=2      # 2 per min
 )
 
-# Set your WAQI API token
 calculator.set_token("api-token")
 
 # Start sampling
@@ -103,10 +102,9 @@ while calculator.sampling_status() != 'DONE':
     time.sleep(30)
     print(f"Current status: {calculator.sampling_status()}")
 
-# Get results
 avg_pm25 = calculator.avg_pm25_all_sites()
 print(f"Average PM2.5: {avg_pm25}")
 
-# Clean up
+# Clean up (optional)
 calculator.clean_up()
 ```
