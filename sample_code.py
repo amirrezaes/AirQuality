@@ -3,7 +3,7 @@ import time
 
 my_obj = calculate_average_pm25(48, -123.377021, 49.201088, -122.7613762, 1, 5) # victoria to vancouver
 
-my_obj.set_token("f75e2f09d2fae1680d7a42a642dfdc7654392b94")
+my_obj.set_token("token_here")
 
 
 # Running in non-blocking fashion

@@ -1,5 +1,5 @@
 import requests
-from threading import Thread, Timer, Lock, current_thread, active_count
+from threading import Thread, Timer, Lock, current_thread
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Tuple, Dict
 import logging

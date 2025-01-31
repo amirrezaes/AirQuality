@@ -5,7 +5,7 @@
 #     version='0.1.0',
 #     packages=find_packages(),
 #     install_requires=[
-#         # List your dependencies here
+#
 #     ],
 #     author='Amir Esmaeili',
 #     author_email='amir.es90@yahoo.com',
@@ -24,6 +24,6 @@ from setuptools import setup, find_packages
 setup(
     packages=find_packages(),
     install_requires=[
-        # List your dependencies here
+
     ],
 )
