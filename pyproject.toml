@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "air_quality_analyzer"
+version = "0.1.0"
+authors = [
+    {name = "Amir Esmaeili", email = "amir.es90@yahoo.com"},
+]
+description = "A module to analyze air quality by calculating average PM2.5 levels"
+readme = "README.md"
+requires-python = ">=3.6"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/amirrezaes/AirQuality"
