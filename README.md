@@ -1,4 +1,4 @@
-# Air Quality Analyzer
+# Air Quality Analyzer [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
 A Python package for monitoring and analyzing PM2.5 air quality data using the World Air Quality Index (WAQI) API. This tool allows you to collect real-time PM2.5 measurements from multiple monitoring stations within a specified geographical area.
 
