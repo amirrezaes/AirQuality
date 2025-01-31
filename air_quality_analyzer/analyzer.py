@@ -36,7 +36,6 @@ class calculate_average_pm25:
         self.pm25data   = []
 
         self.__timer_threads = {}
-        self.__sampling_threads = {}
         self.__lock = Lock()
         self.thread_cnt       = 8 # can be adjusted for performance
         
@@ -189,10 +188,9 @@ class calculate_average_pm25:
         Set the state of each thread and update the object state with thread safety.
         '''
         with self.__lock:
-            timer_object = self.__sampling_threads[thread_obj] # get parent timer thread object
-            self.__timer_threads[timer_object] = thread_state # update timer thread state
+            self.__timer_threads[thread_obj] = thread_state
 
-            logging.info(f"{thread_obj.name} state: {self.__timer_threads[timer_object]}")
+            logging.info(f"{thread_obj.name} state: {self.__timer_threads[thread_obj]}")
 
             if any([state == self.RUNNING for state in self.__timer_threads.values()]):
                 self.state = self.RUNNING
@@ -238,21 +236,6 @@ class calculate_average_pm25:
         else:
             self.__set_state(self.FAILED, current_thread())
 
-    
-    def __smapler_thread_wrapper(self, name="Worker", blocking=False):
-        '''
-        Wrapper function to run the worker function in a thread.
-        '''
-        work_thread = Thread(target=self.__smapler, name=name)
-
-        with self.__lock:
-            self.__sampling_threads[work_thread] = current_thread() # parent timer thread as value
-
-        work_thread.start()
-
-        if blocking:
-            work_thread.join(timeout=self._thread_timeout)
-
 
     def start_sampling(self, blocking=False) -> None:
         '''
@@ -283,10 +266,7 @@ class calculate_average_pm25:
 
         for delay in range(0, self.__sampling_period * 60, 60 // self.__sampling_rate):
             # Non-blocking timers threads to run worker threads on sampling intervals
-            timer_thread = Timer(delay, 
-                                    self.__smapler_thread_wrapper, 
-                                    args=[f"Sampler-{delay}s", blocking],
-                                    )
+            timer_thread = Timer(delay, self.__smapler)
             timer_thread.setName(f"Timer-{delay}s")
             self.__timer_threads[timer_thread] = self.IDLE
             
@@ -307,12 +287,6 @@ class calculate_average_pm25:
         Stop the sampling process. Clean up data.
         '''
 
-        # wait for running sampling thread to finish
-        for sthread in self.__sampling_threads:
-            if sthread.is_alive():
-                logging.info(f"Waiting for {sthread.name} to finish.")
-                sthread.join()
-
         # wait for Running Timer threads to finish and cancel the rest
         for thread,state in self.__timer_threads.items():
             if state == self.RUNNING:
@@ -329,7 +303,6 @@ class calculate_average_pm25:
         # clean up for next run
         self.pm25data.clear()
         self.__timer_threads.clear()
-        self.__sampling_threads.clear()
         
 
 
