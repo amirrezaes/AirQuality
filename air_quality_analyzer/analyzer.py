@@ -1,11 +1,10 @@
-import json
 import requests
-from threading import Thread, Timer, active_count, Lock, current_thread
+from threading import Thread, Timer, Lock, current_thread, active_count
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Tuple, Dict
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 # API URLs
@@ -31,10 +30,12 @@ class calculate_average_pm25:
 
         self.__sampling_period = sampling_period
         self.__sampling_rate   = sampling_rate
+        self._thread_timeout   = sampling_period * 60 + 5 # 5 seconds extra if needed
 
         self.__stations = [] # holds station coordinates
         self.pm25data   = []
 
+        self.__timer_threads = {}
         self.__sampling_threads = {}
         self.__lock = Lock()
         self.thread_cnt       = 8 # can be adjusted for performance
@@ -49,12 +50,23 @@ class calculate_average_pm25:
         Args:
             error (dict): JSON data containing error message
         """
-        print(f"Error: {error.get('message')}")
+        logging.error(f"{error.get('message')}")
 
+    def __calculate_avg_pm25(self) -> float:
+        """
+        Calculate the average PM2.5 value from the data.
+
+        Returns:
+            float: Average PM2.5 value
+        """
+        if self.pm25data == []:
+            return 0
+
+        return sum(self.pm25data) / len(self.pm25data)
 
     def __extract_stations(self, json_data: dict) -> List[Tuple[float, float]] | None:
         """
-        Extract all the coordinates from Map Querys Json result.
+        Extract all the coordinates from Map Query's Json result.
     
         Args:
             json_data (dict): JSON data containing station information
@@ -62,6 +74,8 @@ class calculate_average_pm25:
         Returns:
             List[Tuple[float, float]]: List of tuples containing lat, lon or None
         """
+        if json_data is None: # In case of failed request
+            return None
 
         # Check status first
         if json_data.get('status') != 'ok':
@@ -70,13 +84,16 @@ class calculate_average_pm25:
         
 
         coordinates = []
-        for station in json_data.get('data', []):
-            lat = station.get('lat')
-            lon = station.get('lon')
-            
-            # Only add if we have both coordinates
-            if lat is not None and lon is not None:
-                coordinates.append((lat, lon))
+        try:
+            for station in json_data.get('data', []):
+                lat = station.get('lat')
+                lon = station.get('lon')
+                
+                # Only add if we have both coordinates
+                if lat is not None and lon is not None:
+                    coordinates.append((lat, lon))
+        except (TypeError, ValueError): # In case of missing keys or invalid conversion
+            return None
         
         return coordinates
     
@@ -91,9 +108,12 @@ class calculate_average_pm25:
         Returns:
             Optional[float]: PM2.5 value if found and status is ok, None otherwise
         """
+        if json_data is None: # In case of failed request
+            return None
         
         # Check status first
         if json_data.get('status') != 'ok':
+            self.__handle_api_error(json_data)
             return None
         
         try:
@@ -115,10 +135,14 @@ class calculate_average_pm25:
                              lat2=self.latitude_2, lng2=self.longitude_2,
                              token=self.TOKEN)
 
-        response = requests.get(url)
-        if response.status_code == 200:
-            return response.json()
-        else:
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return None
+        except requests.exceptions.RequestException as e:
+            logging.error(f"{e}")
             return None
 
 
@@ -135,10 +159,14 @@ class calculate_average_pm25:
         """
         url = GEO_API.format(lat=lat, lon=lon, token=self.TOKEN)
 
-        response = requests.get(url)
-        if response.status_code == 200:
-            return response.json()
-        else:
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                return None
+        except requests.exceptions.RequestException as e:
+            logging.error(f"{e}")
             return None
     
     
@@ -161,23 +189,23 @@ class calculate_average_pm25:
         Set the state of each thread and update the object state with thread safety.
         '''
         with self.__lock:
-            self.__sampling_threads[thread_obj] = thread_state
+            timer_object = self.__sampling_threads[thread_obj] # get parent timer thread object
+            self.__timer_threads[timer_object] = thread_state # update timer thread state
 
-            logging.info(f"{thread_obj.name} state: {thread_state}")
+            logging.info(f"{thread_obj.name} state: {self.__timer_threads[timer_object]}")
 
-            if any([state == self.RUNNING for state in self.__sampling_threads.values()]):
+            if any([state == self.RUNNING for state in self.__timer_threads.values()]):
                 self.state = self.RUNNING
 
-            elif all([state == self.DONE for state in self.__sampling_threads.values()]):
+            elif all([state == self.DONE for state in self.__timer_threads.values()]):
                 self.state = self.DONE
 
-            elif all([state == self.FAILED for state in self.__sampling_threads.values()]):
+            elif all([state == self.FAILED for state in self.__timer_threads.values()]):
                 self.state = self.FAILED
 
             else:
                 self.state = self.IDLE
             
-            logging.info(f"State: {self.state}")
             
 
     def __smapler(self):
@@ -191,65 +219,108 @@ class calculate_average_pm25:
             thread_dict = {executor.submit(self.__get_pm25, st): st for st in self.__stations}
 
             for thread in as_completed(thread_dict):
-                station = thread_dict[thread]
 
+                station = thread_dict[thread]
                 try:
                     pm25_val = thread.result()
-                    if pm25_val is not None:
+                    if pm25_val is not None: # ignore failed requests
                         results.append(pm25_val)
 
                 except Exception as exc:
-                    print(f'{station} generated an exception: {exc}')
+                    logging.error(f"station at lat,lng {station} generated Error: {exc}")
+
+        with self.__lock:
+            self.pm25data.extend(results)
 
         self.__set_state(self.DONE, current_thread())
+
     
-    def __smapler_thread_wrapper(self, name="Worker"):
+    def __smapler_thread_wrapper(self, name="Worker", blocking=False):
         '''
         Wrapper function to run the worker function in a thread.
         '''
         work_thread = Thread(target=self.__smapler, name=name)
+
+        with self.__lock:
+            self.__sampling_threads[work_thread] = current_thread() # parent timer thread as value
+
         work_thread.start()
 
+        if blocking:
+            work_thread.join(timeout=self._thread_timeout)
 
-    def start_sampling(self) -> None:
+
+    def start_sampling(self, blocking=False) -> None:
         '''
         Start sampling PM2.5 values for all stations.
         '''
 
-        if self.TOKEN: # check if token is set
-            if self.__stations == []: # if stations are not already extracted
-                self.__stations = self.__extract_stations(self.__get_map_bound())
-        else:
-            print("Error: Token not set. use set_token()")
+        if not self.TOKEN: # if token is not set
+            logging.error("Error: Token is not set.")
             self.state = self.FAILED
             return
+
+        if self.__stations == []: # if stations are not already extracted
+            self.__stations = self.__extract_stations(self.__get_map_bound())
+
+            if self.__stations is None:
+                logging.error("Request to get stations failed.")
+                self.state = self.FAILED
+                return
+
+            elif self.__stations == []:
+                logging.error("No stations found in the given bounds.")
+                self.state = self.DONE
+                return
 
 
         for delay in range(0, self.__sampling_period * 60, 60 // self.__sampling_rate):
             # Non-blocking timers threads to run worker threads on sampling intervals
-            sampling_thread = Timer(delay, 
-                                    self.__smapler_thread_wrapper, args=[f"Sampler-{delay}s"]
+            timer_thread = Timer(delay, 
+                                    self.__smapler_thread_wrapper, 
+                                    args=[f"Sampler-{delay}s", blocking]
                                     )
-            self.__sampling_threads[sampling_thread] = self.IDLE
-            sampling_thread.start()
+            self.__timer_threads[timer_thread] = self.IDLE
+            
+        
+        for thread in self.__timer_threads.keys():
+            thread.start()
+
+        if blocking:
+            for thread in self.__timer_threads.keys():
+                thread.join()
+
+
+                
         
     
     def stop_sampling(self) -> None:
         '''
         Stop the sampling process. Clean up data.
         '''
-        # wait for running threads to finish and cancel the rest
-        for thread,state in self.__sampling_threads.items():
+
+        # wait for running sampling thread to finish
+        for sthread in self.__sampling_threads:
+            if sthread.is_alive():
+                logging.info(f"Waiting for {sthread.name} to finish.")
+                sthread.join()
+
+        # wait for Running Timer threads to finish and cancel the rest
+        for thread,state in self.__timer_threads.items():
             if state == self.RUNNING:
+                logging.info(f"Waiting for {thread.name} to finish.")
                 thread.join()
-            elif state == self.IDLE:
-                self.__sampling_threads[thread] = self.STOPPED
+            elif state == self.IDLE or thread.is_alive():
+                self.__timer_threads[thread] = self.STOPPED
                 thread.cancel()
 
         self.state = self.STOPPED
 
+        logging.info("Sampling stopped.")
+
         # clean up for next run
         self.pm25data.clear()
+        self.__timer_threads.clear()
         self.__sampling_threads.clear()
         
 
@@ -264,8 +335,19 @@ class calculate_average_pm25:
         return self.state
 
 
-    def avg_pm25_all_sites(self) -> float:
-        pass
+    def avg_pm25_all_sites(self) -> float | None:
+        '''
+        Get the average PM2.5 value from all the sites if the sampling is done.
+
+        Returns:
+            float: Average PM2.5 value
+        '''
+
+        if self.state == self.DONE:
+                return self.__calculate_avg_pm25()
+        else:
+            return None
+        
     
     def set_token(self, token: str) -> None:
         '''
@@ -277,10 +359,6 @@ class calculate_average_pm25:
         if isinstance(token, str):
             self.TOKEN = token
         else:
-            print("Error: Token must be a string.")
+            logging.error("Token must be a string.")
             self.state = self.FAILED
             return
-
-    
-
-        
