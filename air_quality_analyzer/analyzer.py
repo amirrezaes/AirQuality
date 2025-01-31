@@ -12,6 +12,32 @@ MAP_API = "https://api.waqi.info/v2/map/bounds?latlng={lat1},{lng1},{lat2},{lng2
 GEO_API = "https://api.waqi.info/feed/geo:{lat};{lon}/?token={token}"
 
 class calculate_average_pm25:
+    """
+    A class for calculating average PM2.5 values from air quality monitoring stations.
+
+    This class enables periodic sampling of PM2.5 data from multiple air quality monitoring 
+    stations within a defined geographical area. It uses threading to efficiently collect data 
+    from multiple stations concurrently and supports configurable sampling periods and rates.
+
+    Attributes:
+        state (str): Current state of the sampling process. Possible values:
+            - IDLE: Initial state or waiting for next sampling
+            - RUNNING: Currently collecting samples
+            - DONE: Sampling completed successfully
+            - FAILED: Sampling failed due to an error
+            - STOPPED: Sampling process was manually stopped
+        
+        thread_cnt (int): Number of concurrent threads for sampling (default: 8)
+
+    Args:
+        latitude_1 (float): First latitude coordinate of the bounding box
+        longitude_1 (float): First longitude coordinate of the bounding box
+        latitude_2 (float): Second latitude coordinate of the bounding box
+        longitude_2 (float): Second longitude coordinate of the bounding box
+        sampling_period (int, optional): Total duration of sampling in minutes. Defaults to 5.
+        sampling_rate (int, optional): Number of samples to collect per minute. Defaults to 1.
+    """
+
     def __init__(self, latitude_1, longitude_1, latitude_2, longitude_2, sampling_period=5, sampling_rate=1):
 
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -40,11 +66,9 @@ class calculate_average_pm25:
 
         self.__timer_threads = {}
         self.__lock = Lock()
-        self.thread_cnt       = 8 # can be adjusted for performance
+        self.thread_cnt      = 8 # can be adjusted for performance
         
 
-
-    
     def __handle_api_error(self, error: dict) -> None:
         """
         Handle API errors and print the message.
@@ -67,6 +91,7 @@ class calculate_average_pm25:
 
         return sum(self.pm25data) / len(self.pm25data)
 
+
     def __extract_stations(self, json_data: dict) -> List[Tuple[float, float]] | None:
         """
         Extract all the coordinates from Map Query's Json result.
@@ -85,7 +110,6 @@ class calculate_average_pm25:
             self.__handle_api_error(json_data)
             return None
         
-
         coordinates = []
         try:
             for station in json_data.get('data', []):
@@ -187,6 +211,7 @@ class calculate_average_pm25:
         pm25_val = self.__extract_pm25(station_data)
         return pm25_val
 
+
     def __set_state(self, thread_state: str, thread_obj: Thread):
         '''
         Set the state of each thread and update the object state with thread safety.
@@ -207,8 +232,7 @@ class calculate_average_pm25:
 
             else:
                 self.state = self.IDLE
-            
-            
+               
 
     def __smapler(self):
         '''
@@ -230,8 +254,6 @@ class calculate_average_pm25:
 
                 except Exception as exc:
                     self.logger.error(f"station at lat,lng {station} generated Error: {exc}")
-
-
         
         if results:
             with self.__lock:
@@ -270,20 +292,18 @@ class calculate_average_pm25:
                 self.state = self.DONE
                 return
 
-
         for delay in range(0, self.__sampling_period * 60, 60 // self.__sampling_rate):
             # Non-blocking timers threads to run worker threads on sampling intervals
             timer_thread = Timer(delay, self.__smapler)
             timer_thread.setName(f"Timer-{delay}s")
             self.__timer_threads[timer_thread] = self.IDLE
             
-        
         for thread in self.__timer_threads.keys():
             thread.start()
 
         if blocking:
             for thread in self.__timer_threads.keys():
-                thread.join()                
+                thread.join(self._thread_timeout)                
 
     
     def stop_sampling(self) -> None:
@@ -345,7 +365,8 @@ class calculate_average_pm25:
             self.logger.error("Token must be a string.")
             self.state = self.FAILED
             return
-    
+
+
     def clean_up(self):
         '''
         Clean up the object.
@@ -353,6 +374,7 @@ class calculate_average_pm25:
         self.pm25data.clear()
         self.__timer_threads.clear()
         self.state = self.STOPPED
+
 
     def set_logger_level(self, lvl:str) -> None:
         '''

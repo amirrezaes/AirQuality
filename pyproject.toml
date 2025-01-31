@@ -10,7 +10,7 @@ authors = [
 ]
 description = "A module to analyze air quality by calculating average PM2.5 levels"
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.10"
 dependencies = [
     "requests>=2.25.0",
 ]
