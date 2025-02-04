@@ -11,7 +11,7 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s')
 MAP_API = "https://api.waqi.info/v2/map/bounds?latlng={lat1},{lng1},{lat2},{lng2}&networks=all&token={token}"
 GEO_API = "https://api.waqi.info/feed/geo:{lat};{lon}/?token={token}"
 
-class calculate_average_pm25:
+class CalculateAveragePM25:
     """
     A class for calculating average PM2.5 values from air quality monitoring stations.
 
@@ -55,6 +55,8 @@ class calculate_average_pm25:
 
         self.latitude_1, self.longitude_1 = latitude_1, longitude_1
         self.latitude_2, self.longitude_2 = latitude_2, longitude_2
+        if sampling_rate <= 0:
+            raise ValueError("sampling_rate can not be zero or negative")
         
 
         self.__sampling_period = sampling_period
@@ -87,7 +89,7 @@ class calculate_average_pm25:
             float: Average PM2.5 value
         """
         if self.pm25data == []:
-            return 0
+            return None
 
         return sum(self.pm25data) / len(self.pm25data)
 
@@ -279,7 +281,7 @@ class calculate_average_pm25:
             self.state = self.FAILED
             return
 
-        if self.__stations == []: # if stations are not already extracted
+        if not self.__stations: # if stations are not already extracted
             self.__stations = self.__extract_stations(self.__get_map_bound())
 
             if self.__stations is None:
@@ -346,7 +348,7 @@ class calculate_average_pm25:
             float: Average PM2.5 value
         '''
 
-        if self.state == self.DONE:
+        if self.state == self.DONE or not any(thread.is_alive() for thread in self.__timer_threads):
                 return self.__calculate_avg_pm25()
         else:
             return None

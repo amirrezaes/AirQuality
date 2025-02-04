@@ -1,7 +1,7 @@
-from air_quality_analyzer.analyzer import calculate_average_pm25
+from air_quality_analyzer.analyzer import CalculateAveragePM25
 import time
 
-my_obj = calculate_average_pm25(48, -123.377021, 49.201088, -122.7613762, 1, 5) # victoria to vancouver
+my_obj = CalculateAveragePM25(48, -123.377021, 49.201088, -122.7613762, 1, 5) # victoria to vancouver
 
 my_obj.set_token("token_here")
 
