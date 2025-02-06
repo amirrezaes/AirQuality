@@ -1,4 +1,4 @@
-# Air Quality Analyzer
+# Air Quality Analyzer [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
 A Python package for monitoring and analyzing PM2.5 air quality data using the World Air Quality Index (WAQI) API. This tool allows you to collect real-time PM2.5 measurements from multiple monitoring stations within a specified geographical area.
 
@@ -63,7 +63,7 @@ print(f"Average PM2.5: {result}")
 # Stop sampling manually
 analyzer.stop_sampling()
 ```
-Check [sample_code.py](https://github.com/amirrezaes/AirQuality/blob/main/sample_code.py) for more examples
+Check [sample_code.py](https://github.com/amirrezaes/AirQuality/blob/main/sample_code.py) and [doc](https://github.com/amirrezaes/AirQuality/blob/main/doc/documentation.md)for more examples
 ## Configuration
 
 The analyzer can be configured with several parameters:
