@@ -33,10 +33,10 @@ Here's a basic example of how to use the Air Quality Analyzer:
 
 ```python
 import time
-from air_quality_analyzer.analyzer import calculate_average_pm25
+from air_quality_analyzer.analyzer import CalculateAveragePM25
 
 # Initialize the analyzer with geographical bounds
-analyzer = calculate_average_pm25(
+analyzer = CalculateAveragePM25(
     latitude_1=35.6892,    # Southern boundary
     longitude_1=51.3890,   # Western boundary
     latitude_2=35.7272,    # Northern boundary

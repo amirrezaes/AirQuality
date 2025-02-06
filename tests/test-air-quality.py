@@ -2,12 +2,12 @@ import unittest
 from unittest.mock import patch, Mock
 import time
 import requests
-from air_quality_analyzer.analyzer import calculate_average_pm25
+from air_quality_analyzer.analyzer import CalculateAveragePM25
 
 class TestAirQualityAnalyzer(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
-        self.analyzer = calculate_average_pm25(
+        self.analyzer = CalculateAveragePM25(
             latitude_1=48,
             longitude_1=-123.377021,
             latitude_2=49.201088,
@@ -101,7 +101,7 @@ class TestAirQualityAnalyzer(unittest.TestCase):
 
     def test_invalid_token(self):
         """Test behavior with invalid token"""
-        analyzer = calculate_average_pm25(35.6892, 51.3890, 35.7272, 51.4258)
+        analyzer = CalculateAveragePM25(35.6892, 51.3890, 35.7272, 51.4258)
         analyzer.set_token(123)  # Invalid token type
         self.assertEqual(analyzer.sampling_status(), analyzer.FAILED)
 

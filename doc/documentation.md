@@ -1,4 +1,4 @@
-# calculate_average_pm25
+# CalculateAveragePM25
 
 A class that calculates the average PM2.5 (fine particulate matter) values from multiple air quality monitoring stations within a specified geographical boundary using the World Air Quality Index (WAQI) API.
 
@@ -83,7 +83,7 @@ def clean_up() -> None
 
 ```python
 # Create an instance for the Los Angeles area
-calculator = calculate_average_pm25(
+calculator = CalculateAveragePM25(
     latitude_1=34.0522,  # LA downtown
     longitude_1=-118.2437,
     latitude_2=34.0689,  # Hollywood
